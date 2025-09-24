@@ -2,14 +2,22 @@ from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256
 import base64
-import json, os, secrets, string,pyperclip
+import json, os, secrets, string, pyperclip, sys
 from getpass import getpass
 
 
 class PasswordManager:
     def __init__(self,password_file = 'passwords.json',master_file = 'master.json'):
-        # Get the folder of the current script
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Detect if running as PyInstaller executable
+        if getattr(sys, 'frozen', False):
+            # When running as exe, base_dir is folder containing the exe
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # When running as Python script
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+
         data_dir = os.path.join(base_dir, "data")
         os.makedirs(data_dir, exist_ok=True)#creates folder
 
