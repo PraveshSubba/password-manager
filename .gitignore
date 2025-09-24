@@ -1,0 +1,24 @@
+# Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE/editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data files (vaults and master password files)
+data/
+*.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
