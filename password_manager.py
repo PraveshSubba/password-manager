@@ -51,11 +51,9 @@ class PasswordManager:
 
             except (json.JSONDecodeError, KeyError, ValueError):
                 # File is empty or malformed, treat as first-time setup
-                print("Master file is empty or corrupted. Setting up a new master password.")
-                #self.change_master_password()
+                #print("Master file is empty or corrupted. Setting up a new master password.")
                 return True
-        else:
-            #self.change_master_password()
+        else:   
             return True
         
         return False
@@ -100,8 +98,7 @@ class PasswordManager:
     def verify_master_password(self, password):# for verification whether the password is correct or not and load DEK
         hashed = PBKDF2(password, self.salt, dkLen=32, count=100_000, hmac_hash_module=SHA256)
         if not hmac.compare_digest(hashed, self.master_password_hash):
-                print("Invalid master password.")
-                return False
+            return False
 
         # Derive KEK and decrypt DEK
         kek = PBKDF2(password, self.enc_salt, dkLen=32, count=100_000, hmac_hash_module=SHA256)
@@ -110,7 +107,7 @@ class PasswordManager:
         try:
             self.dek = cipher.decrypt_and_verify(self.encrypted_dek, self.dek_tag)
         except ValueError:
-            print("Decryption failed. Possible tampering detected!")
+            #print("Decryption failed. Possible tampering detected!")
             del kek
             return False      
         
@@ -118,18 +115,13 @@ class PasswordManager:
         return True
     
 
-    def change_master_password(self,new_password, password_hint, category ): #change master password     
+    def change_master_password(self,new_password, password_hint ): #change master password     
         self.create_master_password(new_password,password_hint)
 
-        if not category:
-            print("Master password changed successfully.")
-        else:
-            print("Master password added successfully.")
-        self.password_strength(new_password)
+        score = self.password_strength(new_password)
         del new_password, password_hint #delete from memory
+        return score
 
-   
-    
 
     #----------password Vault for sites ---------
 
@@ -167,11 +159,9 @@ class PasswordManager:
         plaintext = cipher.decrypt_and_verify(base64.b64decode(data["ciphertext"]), base64.b64decode(data["tag"]))
         return plaintext.decode()
 
-    def add_password(self):# add new password
-        site = input("Enter site name: ")
-        username = input("Enter username: ")
-        password = getpass("Enter password(no password - auto generate): ")
-        self.password_strength(password)
+    def add_password(self,site,username,password):# add new password
+
+        score = self.password_strength(password)
 
         if password == "":
             password = self.generate_password()
@@ -180,28 +170,20 @@ class PasswordManager:
         del password  # Remove plaintext password from memory
         passwords = self.load_passwords()
         passwords[site] = {"username": username, "password": encrypted_password}
-        print(f"Password for {site} added successfully.")
         self.save_passwords(passwords)
+
+        return True,score
+
 
 
     def check_vault_empty(self):#check if vault is empty
         passwords = self.load_passwords()
         if not passwords:
-            print("Vault is empty.")
             return True, passwords
         return False, passwords
     
-    def get_password(self):#get the password
-        empty,passwords = self.check_vault_empty()
+    def get_password(self,site,passwords):#get the password
 
-        if empty:
-            return
-        print("---- Stored sites -----\n")
-
-        for count,site in enumerate(passwords,start=1):
-            print(f"{count}. {site}")
-
-        site = input("\nEnter site name: ")
         if site in passwords:
         
             password = passwords[site]['password']
@@ -209,26 +191,21 @@ class PasswordManager:
         
             # Copy password to clipboard
             pyperclip.copy(decrypted_password)
-            print(f"\nUsername: {passwords[site]['username']}")
-            print(f"Password for '{site}' copied to clipboard!")
+            username = passwords[site]['username']
             del password
-        else:
-            print("No password found for this site.")
-
-    def delete_password(self):#deleting the stored password
-        empty,passwords = self.check_vault_empty()
-
-        if empty:
-            return
+            return username
         
-        site = input("Enter site name to delete: ")
+        else:
+            return None
+
+    def delete_password(self, site, passwords ):#deleting the stored password
 
         if site in passwords:
             del passwords[site]
             self.save_passwords(passwords)
-            print(f"Deleted password for {site}.")
+            return True
         else:
-            print("No password found for this site.")
+            return False
 
 
 
@@ -257,12 +234,6 @@ class PasswordManager:
         # Rule 5: Special character
         if any(c in string.punctuation for c in password):
             score += 1
-
-        # Interpret score
-        if score <= 2:
-           print("Password Strength: Weak")
-        elif score <= 4:
-            print("Password Strength: Medium") 
-        else:
-            print("Password Strength: Strong")
+            
+        return score
 
