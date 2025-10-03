@@ -5,6 +5,8 @@ import base64
 import json, os, secrets, string, pyperclip, sys
 from getpass import getpass
 import hmac
+import threading
+import time
 
 
 class PasswordManager:
@@ -182,7 +184,7 @@ class PasswordManager:
             return True, passwords
         return False, passwords
     
-    def get_password(self,site,passwords):#get the password
+    def get_password(self,site,passwords,timeout=15):# get the password
 
         if site in passwords:
         
@@ -191,6 +193,15 @@ class PasswordManager:
         
             # Copy password to clipboard
             pyperclip.copy(decrypted_password)
+
+            # clear clipboard after timeout
+            def clear_clipboard():
+                time.sleep(timeout)
+                if pyperclip.paste() == decrypted_password:
+                    pyperclip.copy("")  # clear clipboard
+                    
+            threading.Thread(target=clear_clipboard, daemon=True).start()
+
             username = passwords[site]['username']
             del password
             return username
