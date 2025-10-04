@@ -92,7 +92,12 @@ class PasswordManager:
         self.dek_nonce = cipher.nonce
         self.hint = password_hint
 
-        del new_password #delete from memory
+       # wipe sensitive local vars
+        try:
+            del kek
+        except Exception:
+            pass
+        del new_password
         #save to master file
         self.save_master_file()
                      
@@ -117,11 +122,48 @@ class PasswordManager:
         return True
     
 
-    def change_master_password(self,new_password, password_hint ): #change master password     
-        self.create_master_password(new_password,password_hint)
-
+    def change_master_password(self, new_password, password_hint=None):
+        # Compute strength of new password
         score = self.password_strength(new_password)
-        del new_password, password_hint #delete from memory
+
+        # Generate new salts for hash and KEK
+        new_salt = secrets.token_bytes(16)
+        new_enc_salt = secrets.token_bytes(16)
+
+        # Derive new master password hash
+        new_master_hash = PBKDF2(new_password, new_salt, dkLen=32, count=100_000, hmac_hash_module=SHA256)
+
+        # Create new DEK if it does not exist (first-time setup)
+        if self.dek is None:
+            self.dek = secrets.token_bytes(32)
+
+        # Re-wrap DEK with new KEK
+        new_kek = PBKDF2(new_password, new_enc_salt, dkLen=32, count=100_000, hmac_hash_module=SHA256)
+        cipher = AES.new(new_kek, AES.MODE_EAX)
+        new_encrypted_dek, new_dek_tag = cipher.encrypt_and_digest(self.dek)
+        new_dek_nonce = cipher.nonce
+
+        # Update internal fields
+        self.salt = new_salt
+        self.enc_salt = new_enc_salt
+        self.master_password_hash = new_master_hash
+        self.encrypted_dek = new_encrypted_dek
+        self.dek_tag = new_dek_tag
+        self.dek_nonce = new_dek_nonce
+
+        if password_hint is not None:
+            self.hint = password_hint
+
+        # Wipe sensitive local vars
+        try:
+            del new_kek
+        except Exception:
+            pass
+        del new_password
+
+        # Save updated master file
+        self.save_master_file()
+
         return score
 
 
@@ -157,9 +199,16 @@ class PasswordManager:
         }
     
     def decrypt_with_dek(self, data):
-        cipher = AES.new(self.dek, AES.MODE_EAX, nonce=base64.b64decode(data["nonce"]))
-        plaintext = cipher.decrypt_and_verify(base64.b64decode(data["ciphertext"]), base64.b64decode(data["tag"]))
-        return plaintext.decode()
+        try:
+            cipher = AES.new(self.dek, AES.MODE_EAX, nonce=base64.b64decode(data["nonce"]))
+            plaintext = cipher.decrypt_and_verify(
+                base64.b64decode(data["ciphertext"]),
+                base64.b64decode(data["tag"])
+            )
+            return plaintext.decode()
+        except ValueError:
+            raise ValueError("Decryption failed: wrong key or corrupted data")
+
 
     def add_password(self,site,username,password):# add new password
 
